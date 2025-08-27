@@ -1,30 +1,37 @@
 #include <iostream>
 #include <exception>
-#include "config.h"
-#include "engine_exporter.h"
+#include "gui_app.h"
+
+#ifdef _WIN32
+#include <windows.h>
+#endif
 
 int main(int argc, char* argv[]) {
     try {
-        // Parse command line arguments
-        ExportConfig config = ConfigParser::parseCommandLine(argc, argv);
+        // Check for console mode (if arguments provided)
+        if (argc > 1) {
+            // For now, just show message about GUI mode
+            std::cout << "EngineExport now runs in GUI mode.\n";
+            std::cout << "Please run without arguments to open the GUI interface.\n";
+            return 0;
+        }
+
+#ifdef _WIN32
+        // Keep console window open for debugging
+        // ShowWindow(GetConsoleWindow(), SW_HIDE);
+#endif
+
+        // Create and run GUI application
+        GuiApp app;
         
-        // Check if we need to exit early (help, version, etc.)
-        if (!config.is_valid()) {
-            return config.input_onnx_path.empty() ? 1 : 0;
+        if (!app.initialize()) {
+            std::cerr << "Failed to initialize application" << std::endl;
+            return 1;
         }
         
-        // Print configuration
-        std::cout << "EngineExport - ONNX to TensorRT Engine Converter\n";
-        std::cout << "================================================\n";
-        std::cout << "Input ONNX: " << config.input_onnx_path << "\n";
-        std::cout << "Output Engine: " << config.get_output_path() << "\n";
-        std::cout << "\n";
+        app.run();
         
-        // Create exporter and run conversion
-        EngineExporter exporter(config);
-        bool success = exporter.exportEngine();
-        
-        return success ? 0 : 1;
+        return 0;
         
     } catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << std::endl;

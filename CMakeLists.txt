@@ -20,22 +20,57 @@ else()
     set(TENSORRT_ROOT "/usr/src/tensorrt")
 endif()
 
-find_path(TENSORRT_INCLUDE_DIR NvInfer.h
-    HINTS ${TENSORRT_ROOT}
-    PATH_SUFFIXES include)
+# TensorRT includes
+set(TENSORRT_INCLUDE_DIR ${TENSORRT_ROOT}/include)
 
-find_library(TENSORRT_LIBRARY nvinfer
-    HINTS ${TENSORRT_ROOT}
-    PATH_SUFFIXES lib lib64)
+# TensorRT libraries - specify exact names for Windows
+if(WIN32)
+    set(TENSORRT_LIBRARY ${TENSORRT_ROOT}/lib/nvinfer_10.lib)
+    set(TENSORRT_ONNX_PARSER_LIBRARY ${TENSORRT_ROOT}/lib/nvonnxparser_10.lib)
+else()
+    find_library(TENSORRT_LIBRARY nvinfer
+        HINTS ${TENSORRT_ROOT}
+        PATH_SUFFIXES lib lib64)
+    
+    find_library(TENSORRT_ONNX_PARSER_LIBRARY nvonnxparser
+        HINTS ${TENSORRT_ROOT}
+        PATH_SUFFIXES lib lib64)
+endif()
 
-find_library(TENSORRT_ONNX_PARSER_LIBRARY nvonnxparser
-    HINTS ${TENSORRT_ROOT}
-    PATH_SUFFIXES lib lib64)
+# Find OpenGL
+find_package(OpenGL REQUIRED)
+
+# GLFW
+set(GLFW_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/deps/glfw)
+set(GLFW_INCLUDE_DIR ${GLFW_ROOT}/include)
+
+if(WIN32)
+    set(GLFW_LIBRARY ${GLFW_ROOT}/lib-vc2022/glfw3.lib)
+else()
+    find_library(GLFW_LIBRARY glfw3
+        HINTS ${GLFW_ROOT}
+        PATH_SUFFIXES lib)
+endif()
+
+# ImGui
+set(IMGUI_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/deps/imgui)
+set(IMGUI_SOURCES
+    ${IMGUI_ROOT}/imgui.cpp
+    ${IMGUI_ROOT}/imgui_demo.cpp
+    ${IMGUI_ROOT}/imgui_draw.cpp
+    ${IMGUI_ROOT}/imgui_tables.cpp
+    ${IMGUI_ROOT}/imgui_widgets.cpp
+    ${IMGUI_ROOT}/backends/imgui_impl_glfw.cpp
+    ${IMGUI_ROOT}/backends/imgui_impl_opengl3.cpp
+)
 
 # Include directories
 include_directories(
     ${TENSORRT_INCLUDE_DIR}
     ${CMAKE_CUDA_TOOLKIT_INCLUDE_DIRECTORIES}
+    ${GLFW_INCLUDE_DIR}
+    ${IMGUI_ROOT}
+    ${IMGUI_ROOT}/backends
 )
 
 # Source files
@@ -44,15 +79,19 @@ set(SOURCES
     src/engine_exporter.cpp
     src/config.cpp
     src/logger.cpp
+    src/gui_app.cpp
+    ${IMGUI_SOURCES}
 )
 
-# Executable
+# Executable (console app for now to avoid WinMain issues)
 add_executable(${PROJECT_NAME} ${SOURCES})
 
 # Link libraries
 target_link_libraries(${PROJECT_NAME}
     ${TENSORRT_LIBRARY}
     ${TENSORRT_ONNX_PARSER_LIBRARY}
+    ${GLFW_LIBRARY}
+    ${OPENGL_LIBRARIES}
     CUDA::cudart
     CUDA::cuda_driver
 )
@@ -77,4 +116,13 @@ if(WIN32)
             ${TENSORRT_ROOT}/lib
             $<TARGET_FILE_DIR:${PROJECT_NAME}>
     )
+    
+    # Copy GLFW DLL if it exists
+    if(EXISTS ${GLFW_ROOT}/lib-vc2022/glfw3.dll)
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${GLFW_ROOT}/lib-vc2022/glfw3.dll
+                $<TARGET_FILE_DIR:${PROJECT_NAME}>
+        )
+    endif()
 endif()

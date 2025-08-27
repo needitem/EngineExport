@@ -174,11 +174,14 @@ void EngineExporter::setupBuilderConfig() {
         std::cout << "  FP16 precision: Requested but not supported on this platform\n";
     }
     
-    if (m_config.enable_fp8 && m_builder->platformHasFastFp8()) {
-        m_builderConfig->setFlag(nvinfer1::BuilderFlag::kFP8);
-        std::cout << "  FP8 precision: Enabled\n";
-    } else if (m_config.enable_fp8) {
-        std::cout << "  FP8 precision: Requested but not supported on this platform\n";
+    if (m_config.enable_fp8) {
+        // FP8 support check - may not be available in all TensorRT versions
+        try {
+            m_builderConfig->setFlag(nvinfer1::BuilderFlag::kFP8);
+            std::cout << "  FP8 precision: Enabled\n";
+        } catch (...) {
+            std::cout << "  FP8 precision: Requested but not supported in this TensorRT version\n";
+        }
     }
     
     // Optimization flags

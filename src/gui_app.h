@@ -6,10 +6,13 @@
 #include <thread>
 #include <mutex>
 #include <queue>
+#include <vector>
 
 struct GLFWwindow;
 class EngineExporter;
 struct ExportConfig;
+struct PluginInfo;
+struct CustomPluginInfo;
 
 enum class ExportStatus {
     IDLE,
@@ -48,6 +51,17 @@ private:
     int m_workspaceMb = 1024;
     bool m_verbose = true;
     
+    // Plugin selection state
+    std::vector<PluginInfo> m_availablePlugins;
+    std::vector<CustomPluginInfo> m_customPlugins;
+    bool m_showPluginWindow = false;
+    
+    // Custom plugin dialog state
+    char m_newPluginName[256] = {};
+    char m_newPluginPath[512] = {};
+    char m_newPluginDesc[512] = {};
+    bool m_showAddPluginDialog = false;
+    
     // Export state
     std::atomic<ExportStatus> m_exportStatus{ExportStatus::IDLE};
     std::atomic<float> m_exportProgress{0.0f};
@@ -65,6 +79,8 @@ private:
     void renderExportButton();
     void renderProgressBar();
     void renderLogWindow();
+    void renderPluginSelection();
+    void renderAddPluginDialog();
     
     // File dialogs
     bool openFileDialog(std::string& path, const char* filter);
@@ -83,4 +99,11 @@ private:
     // UI helpers
     void helpMarker(const char* desc);
     bool fileExists(const std::string& path);
+    
+    // Plugin management
+    void initializePlugins();
+    void updateSelectedPlugins();
+    void addCustomPlugin(const std::string& name, const std::string& path, const std::string& description);
+    void removeCustomPlugin(size_t index);
+    bool validatePluginPath(const std::string& path);
 };

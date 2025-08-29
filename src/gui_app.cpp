@@ -68,6 +68,9 @@ bool GuiApp::initialize() {
     ImGui_ImplGlfw_InitForOpenGL(m_window, true);
     ImGui_ImplOpenGL3_Init("#version 330");
 
+    // Initialize plugins
+    initializePlugins();
+    
     addLog("EngineExport GUI initialized successfully");
     return true;
 }
@@ -86,6 +89,11 @@ void GuiApp::run() {
 
         // Render main window
         renderMainWindow();
+        
+        // Render plugin selection window if opened
+        if (m_showPluginWindow) {
+            renderPluginSelection();
+        }
 
         // Rendering
         ImGui::Render();
@@ -248,6 +256,41 @@ void GuiApp::renderExportOptions() {
     ImGui::Checkbox("Verbose Output", &m_verbose);
     ImGui::SameLine();
     helpMarker("Enable detailed logging during conversion");
+    
+    ImGui::Spacing();
+    
+    // Plugin selection button
+    if (ImGui::Button("Select Plugins", ImVec2(150, 30))) {
+        m_showPluginWindow = true;
+    }
+    ImGui::SameLine();
+    helpMarker("Configure TensorRT plugins for your model");
+    
+    // Show selected plugin count
+    int enabledBuiltInCount = 0;
+    for (const auto& plugin : m_availablePlugins) {
+        if (plugin.enabled) enabledBuiltInCount++;
+    }
+    
+    int enabledCustomCount = 0;
+    for (const auto& plugin : m_customPlugins) {
+        if (plugin.enabled) enabledCustomCount++;
+    }
+    
+    int totalEnabled = enabledBuiltInCount + enabledCustomCount;
+    
+    ImGui::SameLine();
+    if (totalEnabled > 0) {
+        ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "(%d plugins selected)", totalEnabled);
+        if (ImGui::IsItemHovered() && (enabledBuiltInCount > 0 || enabledCustomCount > 0)) {
+            ImGui::BeginTooltip();
+            ImGui::Text("Built-in: %d", enabledBuiltInCount);
+            ImGui::Text("Custom: %d", enabledCustomCount);
+            ImGui::EndTooltip();
+        }
+    } else {
+        ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "(no plugins selected)");
+    }
 }
 
 void GuiApp::renderExportButton() {
@@ -397,6 +440,40 @@ void GuiApp::exportThreadFunc() {
         config.workspace_mb = m_workspaceMb;
         config.verbose = m_verbose;
         
+        // Add selected plugins to config
+        config.selected_plugins.clear();
+        int enabledPluginCount = 0;
+        
+        // Add built-in plugins
+        for (const auto& plugin : m_availablePlugins) {
+            if (plugin.enabled) {
+                config.selected_plugins.insert(plugin.name);
+                enabledPluginCount++;
+            }
+        }
+        
+        // Add custom plugins (use library path as identifier)
+        for (const auto& plugin : m_customPlugins) {
+            if (plugin.enabled) {
+                config.selected_plugins.insert(plugin.libraryPath);
+                enabledPluginCount++;
+            }
+        }
+        
+        if (enabledPluginCount > 0) {
+            addLog("Using " + std::to_string(enabledPluginCount) + " selected plugins");
+            for (const auto& plugin : m_availablePlugins) {
+                if (plugin.enabled) {
+                    addLog("  - Built-in: " + plugin.name);
+                }
+            }
+            for (const auto& plugin : m_customPlugins) {
+                if (plugin.enabled) {
+                    addLog("  - Custom: " + plugin.name + " (" + plugin.libraryPath + ")");
+                }
+            }
+        }
+        
         addLog("Starting engine export...");
         addLog("Input: " + config.input_onnx_path);
         addLog("Output: " + config.get_output_path());
@@ -473,4 +550,294 @@ void GuiApp::helpMarker(const char* desc) {
 
 bool GuiApp::fileExists(const std::string& path) {
     return std::filesystem::exists(path);
+}
+
+void GuiApp::initializePlugins() {
+    m_availablePlugins = PluginManager::getAvailablePlugins();
+    addLog("Loaded " + std::to_string(m_availablePlugins.size()) + " available plugins");
+}
+
+void GuiApp::renderPluginSelection() {
+    ImGui::SetNextWindowSize(ImVec2(700, 600), ImGuiCond_FirstUseEver);
+    
+    if (ImGui::Begin("Plugin Selection", &m_showPluginWindow)) {
+        ImGui::Text("Select TensorRT plugins to enable for your model:");
+        ImGui::Separator();
+        ImGui::Spacing();
+        
+        // Create tabs for built-in and custom plugins
+        if (ImGui::BeginTabBar("PluginTabs")) {
+            // Built-in plugins tab
+            if (ImGui::BeginTabItem("Built-in Plugins")) {
+                if (ImGui::BeginChild("BuiltInPluginList", ImVec2(0, -80), true)) {
+                    for (auto& plugin : m_availablePlugins) {
+                        ImGui::PushID(&plugin);
+                        
+                        bool changed = ImGui::Checkbox(plugin.name.c_str(), &plugin.enabled);
+                        if (changed) {
+                            updateSelectedPlugins();
+                            std::string status = plugin.enabled ? "enabled" : "disabled";
+                            addLog("Plugin " + plugin.name + " " + status);
+                        }
+                        
+                        ImGui::SameLine();
+                        ImGui::TextDisabled("(?)");
+                        if (ImGui::IsItemHovered()) {
+                            ImGui::BeginTooltip();
+                            ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+                            ImGui::TextUnformatted(plugin.description.c_str());
+                            ImGui::PopTextWrapPos();
+                            ImGui::EndTooltip();
+                        }
+                        
+                        ImGui::PopID();
+                    }
+                }
+                ImGui::EndChild();
+                ImGui::EndTabItem();
+            }
+            
+            // Custom plugins tab
+            if (ImGui::BeginTabItem("Custom Plugins")) {
+                if (ImGui::BeginChild("CustomPluginList", ImVec2(0, -80), true)) {
+                    if (m_customPlugins.empty()) {
+                        ImGui::TextDisabled("No custom plugins added yet.");
+                        ImGui::Spacing();
+                        ImGui::Text("Click 'Add Plugin' to add a custom TensorRT plugin library.");
+                    } else {
+                        for (size_t i = 0; i < m_customPlugins.size(); ++i) {
+                            auto& plugin = m_customPlugins[i];
+                            ImGui::PushID(i);
+                            
+                            bool changed = ImGui::Checkbox(plugin.name.c_str(), &plugin.enabled);
+                            if (changed) {
+                                updateSelectedPlugins();
+                                std::string status = plugin.enabled ? "enabled" : "disabled";
+                                addLog("Custom plugin " + plugin.name + " " + status);
+                            }
+                            
+                            // Plugin info
+                            ImGui::SameLine();
+                            ImGui::TextDisabled("(?)");
+                            if (ImGui::IsItemHovered()) {
+                                ImGui::BeginTooltip();
+                                ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+                                ImGui::Text("Path: %s", plugin.libraryPath.c_str());
+                                if (!plugin.description.empty()) {
+                                    ImGui::Text("Description: %s", plugin.description.c_str());
+                                }
+                                ImGui::PopTextWrapPos();
+                                ImGui::EndTooltip();
+                            }
+                            
+                            // Delete button
+                            ImGui::SameLine();
+                            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.8f, 0.2f, 0.2f, 1.0f));
+                            if (ImGui::SmallButton("Delete")) {
+                                removeCustomPlugin(i);
+                                ImGui::PopStyleColor();
+                                ImGui::PopID();
+                                break; // Exit loop since we modified the vector
+                            }
+                            ImGui::PopStyleColor();
+                            
+                            ImGui::PopID();
+                        }
+                    }
+                }
+                ImGui::EndChild();
+                ImGui::EndTabItem();
+            }
+            
+            ImGui::EndTabBar();
+        }
+        
+        ImGui::Separator();
+        
+        // Bottom buttons
+        if (ImGui::Button("Add Plugin", ImVec2(90, 30))) {
+            m_showAddPluginDialog = true;
+            // Clear the form
+            memset(m_newPluginName, 0, sizeof(m_newPluginName));
+            memset(m_newPluginPath, 0, sizeof(m_newPluginPath));
+            memset(m_newPluginDesc, 0, sizeof(m_newPluginDesc));
+        }
+        
+        ImGui::SameLine();
+        if (ImGui::Button("Select All", ImVec2(80, 30))) {
+            for (auto& plugin : m_availablePlugins) {
+                plugin.enabled = true;
+            }
+            for (auto& plugin : m_customPlugins) {
+                plugin.enabled = true;
+            }
+            updateSelectedPlugins();
+            addLog("All plugins enabled");
+        }
+        
+        ImGui::SameLine();
+        if (ImGui::Button("Clear All", ImVec2(80, 30))) {
+            for (auto& plugin : m_availablePlugins) {
+                plugin.enabled = false;
+            }
+            for (auto& plugin : m_customPlugins) {
+                plugin.enabled = false;
+            }
+            updateSelectedPlugins();
+            addLog("All plugins disabled");
+        }
+        
+        ImGui::SameLine();
+        ImGui::Dummy(ImVec2(150, 0)); // spacing
+        
+        ImGui::SameLine();
+        if (ImGui::Button("Close", ImVec2(80, 30))) {
+            m_showPluginWindow = false;
+        }
+        
+        // Show plugin count
+        int enabledBuiltInCount = 0;
+        for (const auto& plugin : m_availablePlugins) {
+            if (plugin.enabled) enabledBuiltInCount++;
+        }
+        
+        int enabledCustomCount = 0;
+        for (const auto& plugin : m_customPlugins) {
+            if (plugin.enabled) enabledCustomCount++;
+        }
+        
+        int totalBuiltIn = (int)m_availablePlugins.size();
+        int totalCustom = (int)m_customPlugins.size();
+        int totalEnabled = enabledBuiltInCount + enabledCustomCount;
+        int totalPlugins = totalBuiltIn + totalCustom;
+        
+        ImGui::SameLine();
+        ImGui::Text("(%d/%d enabled)", totalEnabled, totalPlugins);
+        if (ImGui::IsItemHovered()) {
+            ImGui::BeginTooltip();
+            ImGui::Text("Built-in: %d/%d", enabledBuiltInCount, totalBuiltIn);
+            ImGui::Text("Custom: %d/%d", enabledCustomCount, totalCustom);
+            ImGui::EndTooltip();
+        }
+    }
+    ImGui::End();
+    
+    // Render add plugin dialog if shown
+    if (m_showAddPluginDialog) {
+        renderAddPluginDialog();
+    }
+}
+
+void GuiApp::renderAddPluginDialog() {
+    ImGui::SetNextWindowSize(ImVec2(500, 300), ImGuiCond_FirstUseEver);
+    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(), ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    
+    if (ImGui::Begin("Add Custom Plugin", &m_showAddPluginDialog, ImGuiWindowFlags_Modal)) {
+        ImGui::Text("Add a custom TensorRT plugin library:");
+        ImGui::Separator();
+        ImGui::Spacing();
+        
+        // Plugin name
+        ImGui::Text("Plugin Name:");
+        ImGui::InputText("##PluginName", m_newPluginName, sizeof(m_newPluginName));
+        helpMarker("A descriptive name for your plugin");
+        
+        ImGui::Spacing();
+        
+        // Plugin library path
+        ImGui::Text("Library Path:");
+        ImGui::PushItemWidth(-100);
+        ImGui::InputText("##PluginPath", m_newPluginPath, sizeof(m_newPluginPath));
+        ImGui::PopItemWidth();
+        ImGui::SameLine();
+        
+        if (ImGui::Button("Browse##Plugin")) {
+            std::string path;
+            if (openFileDialog(path, "Dynamic Libraries\0*.dll;*.so;*.dylib\0All Files\0*.*\0")) {
+                strncpy_s(m_newPluginPath, path.c_str(), sizeof(m_newPluginPath) - 1);
+            }
+        }
+        helpMarker("Path to the plugin library file (.dll, .so, or .dylib)");
+        
+        ImGui::Spacing();
+        
+        // Plugin description (optional)
+        ImGui::Text("Description (optional):");
+        ImGui::InputTextMultiline("##PluginDesc", m_newPluginDesc, sizeof(m_newPluginDesc), ImVec2(0, 60));
+        
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+        
+        // Validation and buttons
+        bool isValid = strlen(m_newPluginName) > 0 && strlen(m_newPluginPath) > 0;
+        bool pathExists = isValid && validatePluginPath(std::string(m_newPluginPath));
+        
+        if (!isValid) {
+            ImGui::TextColored(ImVec4(1.0f, 0.6f, 0.0f, 1.0f), "Please provide both name and path.");
+        } else if (!pathExists) {
+            ImGui::TextColored(ImVec4(1.0f, 0.0f, 0.0f, 1.0f), "Plugin file does not exist.");
+        } else {
+            ImGui::TextColored(ImVec4(0.0f, 1.0f, 0.0f, 1.0f), "Ready to add plugin.");
+        }
+        
+        ImGui::Spacing();
+        
+        // Buttons
+        if (!isValid || !pathExists) {
+            ImGui::BeginDisabled();
+        }
+        
+        if (ImGui::Button("Add Plugin", ImVec2(100, 30))) {
+            addCustomPlugin(
+                std::string(m_newPluginName),
+                std::string(m_newPluginPath),
+                std::string(m_newPluginDesc)
+            );
+            m_showAddPluginDialog = false;
+        }
+        
+        if (!isValid || !pathExists) {
+            ImGui::EndDisabled();
+        }
+        
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(100, 30))) {
+            m_showAddPluginDialog = false;
+        }
+    }
+    ImGui::End();
+}
+
+void GuiApp::updateSelectedPlugins() {
+    // Update the configuration with selected plugins
+    // This will be used when creating the ExportConfig
+}
+
+void GuiApp::addCustomPlugin(const std::string& name, const std::string& path, const std::string& description) {
+    // Check if plugin with same name already exists
+    for (const auto& plugin : m_customPlugins) {
+        if (plugin.name == name) {
+            addLog("Plugin with name '" + name + "' already exists", true);
+            return;
+        }
+    }
+    
+    CustomPluginInfo plugin(name, path, description);
+    m_customPlugins.push_back(plugin);
+    addLog("Added custom plugin: " + name);
+    addLog("Path: " + path);
+}
+
+void GuiApp::removeCustomPlugin(size_t index) {
+    if (index < m_customPlugins.size()) {
+        std::string name = m_customPlugins[index].name;
+        m_customPlugins.erase(m_customPlugins.begin() + index);
+        addLog("Removed custom plugin: " + name);
+        updateSelectedPlugins();
+    }
+}
+
+bool GuiApp::validatePluginPath(const std::string& path) {
+    return fileExists(path);
 }

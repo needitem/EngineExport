@@ -17,6 +17,10 @@ struct ExportConfig {
     bool enable_precision_constraints = true;
     bool enable_detailed_profiling = false;
     
+    // NMS settings
+    bool fix_nms_output = false;
+    int nms_max_detections = 300;
+    
     // Validation
     bool is_valid() const {
         return !input_onnx_path.empty();

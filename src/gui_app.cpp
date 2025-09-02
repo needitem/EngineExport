@@ -243,6 +243,25 @@ void GuiApp::renderExportOptions() {
     helpMarker("Amount of GPU memory to use for TensorRT workspace");
 
     ImGui::Spacing();
+    
+    // NMS Settings
+    ImGui::Text("NMS Settings:");
+    ImGui::Checkbox("Fix NMS Output Size", &m_fixNmsOutput);
+    ImGui::SameLine();
+    helpMarker("Fix NMS output to constant size for CUDA Graph compatibility");
+    
+    if (m_fixNmsOutput) {
+        ImGui::Indent();
+        ImGui::Text("Max Detections:");
+        ImGui::SameLine();
+        ImGui::InputInt("##MaxDetections", &m_nmsMaxDetections, 50, 100);
+        if (m_nmsMaxDetections < 100) m_nmsMaxDetections = 100;
+        if (m_nmsMaxDetections > 1000) m_nmsMaxDetections = 1000;
+        helpMarker("Maximum number of detections (100-1000, default: 300)");
+        ImGui::Unindent();
+    }
+
+    ImGui::Spacing();
 
     // Verbose output
     ImGui::Checkbox("Verbose Output", &m_verbose);
@@ -396,6 +415,8 @@ void GuiApp::exportThreadFunc() {
         config.enable_fp8 = m_enableFp8;
         config.workspace_mb = m_workspaceMb;
         config.verbose = m_verbose;
+        config.fix_nms_output = m_fixNmsOutput;
+        config.nms_max_detections = m_nmsMaxDetections;
         
         addLog("Starting engine export...");
         addLog("Input: " + config.input_onnx_path);

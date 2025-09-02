@@ -47,6 +47,8 @@ private:
     bool m_enableFp8 = false;
     int m_workspaceMb = 1024;
     bool m_verbose = true;
+    bool m_fixNmsOutput = false;
+    int m_nmsMaxDetections = 300;
     
     // Export state
     std::atomic<ExportStatus> m_exportStatus{ExportStatus::IDLE};

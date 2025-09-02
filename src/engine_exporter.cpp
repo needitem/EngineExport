@@ -233,6 +233,29 @@ void EngineExporter::setupOptimizationProfile() {
         std::cout << "  Input resolution: " << resolution << "x" << resolution << "\n";
     }
     
+    // NMS 출력 고정 크기 설정 (NMS가 모델에 포함된 경우)
+    if (m_config.fix_nms_output) {
+        // 모든 출력을 확인하여 NMS 출력 찾기
+        for (int i = 0; i < m_network->getNbOutputs(); ++i) {
+            auto output = m_network->getOutput(i);
+            const char* outputName = output->getName();
+            nvinfer1::Dims outputDims = output->getDimensions();
+            
+            // NMS 출력은 보통 [batch, num_detections, 6] 형태
+            // 동적 차원(-1)을 고정 크기로 설정
+            if (outputDims.nbDims == 3 && outputDims.d[2] == 6) {
+                // 사용자가 설정한 크기로 고정
+                nvinfer1::Dims fixedDims{3, {1, m_config.nms_max_detections, 6}};
+                
+                profile->setDimensions(outputName, nvinfer1::OptProfileSelector::kMIN, fixedDims);
+                profile->setDimensions(outputName, nvinfer1::OptProfileSelector::kOPT, fixedDims);
+                profile->setDimensions(outputName, nvinfer1::OptProfileSelector::kMAX, fixedDims);
+                
+                std::cout << "  NMS output fixed to: [1, " << m_config.nms_max_detections << ", 6]\n";
+            }
+        }
+    }
+    
     m_builderConfig->addOptimizationProfile(profile);
 }
 

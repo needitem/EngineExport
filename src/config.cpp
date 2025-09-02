@@ -98,3 +98,50 @@ std::string ConfigParser::getOptionValue(const std::vector<std::string>& args, s
     }
     return args[++index];
 }
+
+// PluginManager implementation
+std::vector<PluginInfo> PluginManager::getAvailablePlugins() {
+    return {
+        {TensorRTPlugin::GRID_SAMPLER, "GridSampler", "2D grid sampling operation", false},
+        {TensorRTPlugin::NORMALIZE, "Normalize", "Normalization layer", false},
+        {TensorRTPlugin::SCATTERND, "ScatterND", "Scatter operation with N-dimensional indices", false},
+        {TensorRTPlugin::INSTANCE_NORMALIZATION, "InstanceNormalization", "Instance normalization layer", false},
+        {TensorRTPlugin::CLIP, "Clip", "Clipping operation", false},
+        {TensorRTPlugin::LEAKY_RELU, "LeakyReLU", "Leaky ReLU activation", false},
+        {TensorRTPlugin::ELU, "ELU", "Exponential Linear Unit activation", false},
+        {TensorRTPlugin::SELU, "SELU", "Scaled Exponential Linear Unit activation", false},
+        {TensorRTPlugin::SOFTPLUS, "SoftPlus", "SoftPlus activation", false},
+        {TensorRTPlugin::SOFTSIGN, "SoftSign", "SoftSign activation", false},
+        {TensorRTPlugin::HARD_SIGMOID, "HardSigmoid", "Hard Sigmoid activation", false},
+        {TensorRTPlugin::SCALED_TANH, "ScaledTanh", "Scaled hyperbolic tangent activation", false},
+        {TensorRTPlugin::THRESH_RELU, "ThresholdedReLU", "Thresholded ReLU activation", false},
+        {TensorRTPlugin::PRELU, "PReLU", "Parametric ReLU activation", false},
+        {TensorRTPlugin::DETECTION_OUTPUT, "DetectionOutput", "Detection output layer for object detection", false},
+        {TensorRTPlugin::PRIOR_BOX, "PriorBox", "Prior box layer for SSD", false},
+        {TensorRTPlugin::SHUFFLE_CHANNEL, "ShuffleChannel", "Channel shuffle operation", false},
+        {TensorRTPlugin::REGION_LAYER, "RegionLayer", "YOLO region layer", false},
+        {TensorRTPlugin::REORG_LAYER, "ReorgLayer", "YOLO reorg layer", false},
+        {TensorRTPlugin::NMS_ONNX, "NMS_ONNX", "ONNX Non-Maximum Suppression", false},
+        {TensorRTPlugin::EFFICIENT_NMS_ONNX, "EfficientNMS_ONNX", "Efficient ONNX Non-Maximum Suppression", false}
+    };
+}
+
+std::string PluginManager::getPluginName(TensorRTPlugin plugin) {
+    auto plugins = getAvailablePlugins();
+    for (const auto& p : plugins) {
+        if (p.type == plugin) {
+            return p.name;
+        }
+    }
+    return "Unknown";
+}
+
+std::string PluginManager::getPluginDescription(TensorRTPlugin plugin) {
+    auto plugins = getAvailablePlugins();
+    for (const auto& p : plugins) {
+        if (p.type == plugin) {
+            return p.description;
+        }
+    }
+    return "Unknown plugin";
+}

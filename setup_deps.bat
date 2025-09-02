@@ -16,16 +16,24 @@ if exist "..\..\needaimbot\needaimbot\modules\TensorRT-10.8.0.43" (
     echo Or manually copy TensorRT to deps\TensorRT\
 )
 
-REM Download and setup GLFW (pre-compiled binaries)
-if not exist glfw (
-    echo Downloading GLFW...
-    powershell -Command "Invoke-WebRequest -Uri 'https://github.com/glfw/glfw/releases/download/3.4/glfw-3.4.bin.WIN64.zip' -OutFile 'glfw.zip'"
-    powershell -Command "Expand-Archive -Path 'glfw.zip' -DestinationPath '.'"
-    ren glfw-3.4.bin.WIN64 glfw
-    del glfw.zip
-    echo GLFW downloaded and extracted
+REM Copy GLFW from needaimbot project
+if exist "D:\my\needaimbot\needaimbot\modules\glfw-3.4.bin.WIN64" (
+    echo Copying GLFW from needaimbot project...
+    if exist glfw rmdir /S /Q glfw
+    xcopy /E /I /Y "D:\my\needaimbot\needaimbot\modules\glfw-3.4.bin.WIN64" "glfw"
+    echo GLFW copied from needaimbot project
 ) else (
-    echo GLFW already exists
+    REM Download and setup GLFW (pre-compiled binaries) as fallback
+    if not exist glfw (
+        echo Downloading GLFW...
+        powershell -Command "Invoke-WebRequest -Uri 'https://github.com/glfw/glfw/releases/download/3.4/glfw-3.4.bin.WIN64.zip' -OutFile 'glfw.zip'"
+        powershell -Command "Expand-Archive -Path 'glfw.zip' -DestinationPath '.'"
+        ren glfw-3.4.bin.WIN64 glfw
+        del glfw.zip
+        echo GLFW downloaded and extracted
+    ) else (
+        echo GLFW already exists
+    )
 )
 
 REM Download and setup ImGui

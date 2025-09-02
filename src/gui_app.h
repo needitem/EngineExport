@@ -48,10 +48,29 @@ private:
     int m_resolution = 640;
     bool m_enableFp16 = true;
     bool m_enableFp8 = false;
+    bool m_enableInt8 = false;
     int m_workspaceMb = 1024;
     bool m_verbose = true;
     bool m_fixNmsOutput = false;
     int m_nmsMaxDetections = 300;
+    
+    // Advanced optimization settings
+    bool m_enableTf32 = true;
+    bool m_enableSparseWeights = true;
+    bool m_enableDirectIO = true;
+    bool m_enableRefit = true;
+    bool m_disableTimingCache = true;
+    int m_optimizationLevel = 5;
+    
+    // Tactic sources
+    bool m_useCublas = true;
+    bool m_useCublasLt = true;
+    bool m_useCudnn = true;
+    bool m_useEdgeMaskConv = true;
+    
+    // Other settings
+    bool m_enableGpuFallback = true;
+    bool m_enablePrecisionConstraints = false;
     
     // Plugin selection state
     std::vector<PluginInfo> m_availablePlugins;

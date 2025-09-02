@@ -184,7 +184,15 @@ void EngineExporter::setupBuilderConfig() {
         }
     }
     
-    // Optimization flags
+    // ========== 에임봇 최고 속도 최적화 플래그 ==========
+    
+    // INT8 정밀도 (UI에서 설정 가능)
+    if (m_config.enable_int8 && m_builder->platformHasFastInt8()) {
+        m_builderConfig->setFlag(nvinfer1::BuilderFlag::kINT8);
+        std::cout << "  INT8 precision: Enabled\n";
+    }
+    
+    // 1. 기본 최적화 플래그
     if (m_config.enable_gpu_fallback) {
         m_builderConfig->setFlag(nvinfer1::BuilderFlag::kGPU_FALLBACK);
     }
@@ -193,12 +201,65 @@ void EngineExporter::setupBuilderConfig() {
         m_builderConfig->setFlag(nvinfer1::BuilderFlag::kPREFER_PRECISION_CONSTRAINTS);
     }
     
-    // Tactics sources for better kernel selection
-    m_builderConfig->setTacticSources(
-        1U << static_cast<uint32_t>(nvinfer1::TacticSource::kCUBLAS) |
-        1U << static_cast<uint32_t>(nvinfer1::TacticSource::kCUBLAS_LT) |
-        1U << static_cast<uint32_t>(nvinfer1::TacticSource::kCUDNN)
-    );
+    // 2. 레이턴시 최적화 (속도 최우선)
+    if (m_config.disable_timing_cache) {
+        m_builderConfig->setFlag(nvinfer1::BuilderFlag::kDISABLE_TIMING_CACHE);
+    }
+    m_builderConfig->setBuilderOptimizationLevel(m_config.optimization_level);
+    
+    // 3. 커널 선택 최적화
+    if (m_config.enable_tf32 && m_builder->platformHasTf32()) {
+        m_builderConfig->setFlag(nvinfer1::BuilderFlag::kTF32);
+    }
+    
+    if (m_config.enable_sparse_weights) {
+        m_builderConfig->setFlag(nvinfer1::BuilderFlag::kSPARSE_WEIGHTS);
+    }
+    
+    if (m_config.enable_refit) {
+        m_builderConfig->setFlag(nvinfer1::BuilderFlag::kREFIT);
+    }
+    
+    if (m_config.enable_direct_io) {
+        m_builderConfig->setFlag(nvinfer1::BuilderFlag::kDIRECT_IO);
+    }
+    
+    // 7. Tactic Sources 설정 (UI에서 선택 가능)
+    uint32_t tacticSources = 0;
+    if (m_config.use_cublas) {
+        tacticSources |= 1U << static_cast<uint32_t>(nvinfer1::TacticSource::kCUBLAS);
+    }
+    if (m_config.use_cublas_lt) {
+        tacticSources |= 1U << static_cast<uint32_t>(nvinfer1::TacticSource::kCUBLAS_LT);
+    }
+    if (m_config.use_cudnn) {
+        tacticSources |= 1U << static_cast<uint32_t>(nvinfer1::TacticSource::kCUDNN);
+    }
+    if (m_config.use_edge_mask_conv) {
+        tacticSources |= 1U << static_cast<uint32_t>(nvinfer1::TacticSource::kEDGE_MASK_CONVOLUTIONS);
+    }
+    
+    if (tacticSources != 0) {
+        m_builderConfig->setTacticSources(tacticSources);
+    }
+    
+    // 8. 추가 최적화 힌트 - TensorRT 10 API
+    m_builderConfig->setMemoryPoolLimit(nvinfer1::MemoryPoolType::kWORKSPACE, static_cast<size_t>(m_config.workspace_mb) * 1024 * 1024);
+    
+    std::cout << "  === Performance Optimization Flags Applied ===\n";
+    if (m_config.enable_int8) std::cout << "  - INT8: Enabled\n";
+    if (m_config.enable_tf32) std::cout << "  - TF32: Enabled\n";
+    if (m_config.enable_sparse_weights) std::cout << "  - Sparse Weights: Enabled\n";
+    if (m_config.enable_direct_io) std::cout << "  - Direct I/O: Enabled\n";
+    if (m_config.enable_refit) std::cout << "  - REFIT: Enabled\n";
+    if (m_config.disable_timing_cache) std::cout << "  - Timing Cache: Disabled\n";
+    std::cout << "  - Optimization Level: " << m_config.optimization_level << "\n";
+    std::cout << "  - Tactic Sources: ";
+    if (m_config.use_cublas) std::cout << "CUBLAS ";
+    if (m_config.use_cublas_lt) std::cout << "CUBLAS_LT ";
+    if (m_config.use_cudnn) std::cout << "CUDNN ";
+    if (m_config.use_edge_mask_conv) std::cout << "EDGE_MASK ";
+    std::cout << "\n";
     
     // Profiling
     if (m_config.enable_detailed_profiling) {

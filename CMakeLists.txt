@@ -71,6 +71,7 @@ include_directories(
     ${GLFW_INCLUDE_DIR}
     ${IMGUI_ROOT}
     ${IMGUI_ROOT}/backends
+    ${CMAKE_CURRENT_SOURCE_DIR}/deps
 )
 
 # Source files
@@ -83,13 +84,30 @@ set(SOURCES
     ${IMGUI_SOURCES}
 )
 
-# Executable (console app for now to avoid WinMain issues)
+# Main executable (console app for now to avoid WinMain issues)
 add_executable(${PROJECT_NAME} ${SOURCES})
 
-# Link libraries
+# Engine tester executable
+add_executable(engine_tester 
+    src/engine_tester.cpp
+    src/config.cpp
+    src/logger.cpp
+    ${IMGUI_SOURCES}
+)
+
+# Link libraries for main executable
 target_link_libraries(${PROJECT_NAME}
     ${TENSORRT_LIBRARY}
     ${TENSORRT_ONNX_PARSER_LIBRARY}
+    ${GLFW_LIBRARY}
+    ${OPENGL_LIBRARIES}
+    CUDA::cudart
+    CUDA::cuda_driver
+)
+
+# Link libraries for engine tester
+target_link_libraries(engine_tester
+    ${TENSORRT_LIBRARY}
     ${GLFW_LIBRARY}
     ${OPENGL_LIBRARIES}
     CUDA::cudart
@@ -100,12 +118,18 @@ target_link_libraries(${PROJECT_NAME}
 if(MSVC)
     target_compile_options(${PROJECT_NAME} PRIVATE /W4)
     target_compile_definitions(${PROJECT_NAME} PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
+    target_compile_options(engine_tester PRIVATE /W4)
+    target_compile_definitions(engine_tester PRIVATE NOMINMAX WIN32_LEAN_AND_MEAN)
 else()
     target_compile_options(${PROJECT_NAME} PRIVATE -Wall -Wextra -Wpedantic)
+    target_compile_options(engine_tester PRIVATE -Wall -Wextra -Wpedantic)
 endif()
 
 # Output directory
 set_target_properties(${PROJECT_NAME} PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
+set_target_properties(engine_tester PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
 

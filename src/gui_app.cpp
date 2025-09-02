@@ -242,6 +242,78 @@ void GuiApp::renderExportOptions() {
     ImGui::Checkbox("Enable FP8", &m_enableFp8);
     ImGui::SameLine();
     helpMarker("Enable FP8 precision (experimental, requires Ada Lovelace or newer)");
+    
+    ImGui::Checkbox("Enable INT8", &m_enableInt8);
+    ImGui::SameLine();
+    helpMarker("Enable INT8 quantization (fastest but may reduce accuracy)");
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+    
+    // Advanced Optimization Settings
+    if (ImGui::CollapsingHeader("Advanced Optimization Settings", ImGuiTreeNodeFlags_DefaultOpen)) {
+        ImGui::Indent();
+        
+        // Performance Flags
+        ImGui::Text("Performance Optimization:");
+        
+        ImGui::Checkbox("TF32", &m_enableTf32);
+        ImGui::SameLine();
+        helpMarker("Use TF32 for faster computation on Ampere GPUs (RTX 30xx+)");
+        
+        ImGui::Checkbox("Sparse Weights", &m_enableSparseWeights);
+        ImGui::SameLine();
+        helpMarker("Enable sparse weight optimization for Ampere GPUs");
+        
+        ImGui::Checkbox("Direct I/O", &m_enableDirectIO);
+        ImGui::SameLine();
+        helpMarker("Minimize memory copies for faster execution");
+        
+        ImGui::Checkbox("REFIT Engine", &m_enableRefit);
+        ImGui::SameLine();
+        helpMarker("Create refittable engine (allows weight updates without rebuild)");
+        
+        ImGui::Checkbox("Disable Timing Cache", &m_disableTimingCache);
+        ImGui::SameLine();
+        helpMarker("Disable timing cache for faster build (may affect kernel selection)");
+        
+        ImGui::Text("Optimization Level:");
+        ImGui::SliderInt("##OptLevel", &m_optimizationLevel, 1, 5, "Level %d");
+        helpMarker("Higher levels = more aggressive optimization (5 = maximum)");
+        
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+        
+        // Tactic Sources
+        ImGui::Text("Tactic Sources (Kernel Selection):");
+        
+        ImGui::Checkbox("CUBLAS", &m_useCublas);
+        ImGui::SameLine(150);
+        ImGui::Checkbox("CUBLAS LT", &m_useCublasLt);
+        
+        ImGui::Checkbox("CUDNN", &m_useCudnn);
+        ImGui::SameLine(150);
+        ImGui::Checkbox("Edge Mask Conv", &m_useEdgeMaskConv);
+        
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+        
+        // Other Settings
+        ImGui::Text("Other Settings:");
+        
+        ImGui::Checkbox("GPU Fallback", &m_enableGpuFallback);
+        ImGui::SameLine();
+        helpMarker("Allow GPU fallback for unsupported operations");
+        
+        ImGui::Checkbox("Precision Constraints", &m_enablePrecisionConstraints);
+        ImGui::SameLine();
+        helpMarker("Prefer precision constraints (may reduce speed)");
+        
+        ImGui::Unindent();
+    }
 
     ImGui::Spacing();
 
@@ -456,10 +528,29 @@ void GuiApp::exportThreadFunc() {
         config.input_resolution = m_resolution;
         config.enable_fp16 = m_enableFp16;
         config.enable_fp8 = m_enableFp8;
+        config.enable_int8 = m_enableInt8;
         config.workspace_mb = m_workspaceMb;
         config.verbose = m_verbose;
         config.fix_nms_output = m_fixNmsOutput;
         config.nms_max_detections = m_nmsMaxDetections;
+        
+        // Advanced optimization settings
+        config.enable_tf32 = m_enableTf32;
+        config.enable_sparse_weights = m_enableSparseWeights;
+        config.enable_direct_io = m_enableDirectIO;
+        config.enable_refit = m_enableRefit;
+        config.disable_timing_cache = m_disableTimingCache;
+        config.optimization_level = m_optimizationLevel;
+        
+        // Tactic sources
+        config.use_cublas = m_useCublas;
+        config.use_cublas_lt = m_useCublasLt;
+        config.use_cudnn = m_useCudnn;
+        config.use_edge_mask_conv = m_useEdgeMaskConv;
+        
+        // Other settings
+        config.enable_gpu_fallback = m_enableGpuFallback;
+        config.enable_precision_constraints = m_enablePrecisionConstraints;
         
         // Add selected plugins to config
         config.selected_plugins.clear();

@@ -8,15 +8,30 @@ struct ExportConfig {
     std::string input_onnx_path;
     std::string output_engine_path;
     int input_resolution = 640;
-    bool enable_fp16 = false;
+    bool enable_fp16 = true;  // 에임봇 최적화: FP16 기본 활성화
     bool enable_fp8 = false;
+    bool enable_int8 = false;  // INT8 양자화
     int workspace_mb = 1024;
     bool verbose = false;
     
     // TensorRT optimization settings
     bool enable_gpu_fallback = true;
-    bool enable_precision_constraints = true;
+    bool enable_precision_constraints = false;  // 에임봇 최적화: 속도 우선
     bool enable_detailed_profiling = false;
+    
+    // Advanced optimization flags
+    bool enable_tf32 = true;           // TF32 (Ampere+)
+    bool enable_sparse_weights = true;  // 희소 가중치 최적화
+    bool enable_direct_io = true;       // Direct I/O
+    bool enable_refit = true;           // Refit 가능 엔진
+    bool disable_timing_cache = true;   // 타이밍 캐시 비활성화
+    int optimization_level = 5;         // 최적화 레벨 (1-5)
+    
+    // Tactic Sources
+    bool use_cublas = true;
+    bool use_cublas_lt = true;
+    bool use_cudnn = true;
+    bool use_edge_mask_conv = true;
     
     // NMS settings
     bool fix_nms_output = false;

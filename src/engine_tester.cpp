@@ -8,6 +8,8 @@
 #include <algorithm>
 #include <numeric>
 #include <cstring>
+#include <string>
+#include <cstdint>
 #include "config.h"
 
 // STB Image libraries for image loading/saving
@@ -45,29 +47,79 @@ private:
     std::unique_ptr<IExecutionContext> context;
     void* buffers[2];
     cudaStream_t stream;
-    
+
     int inputIndex;
     int outputIndex;
     size_t inputSize;
     size_t outputSize;
-    
+
+    // Host pinned buffers for faster transfers
+    float* hostInput;
+    float* hostOutput;
+
+    std::string inputTensorName;
+    std::string outputTensorName;
+
+    std::vector<int> resizeXIndices;
+    std::vector<int> resizeYIndices;
+    int cachedSrcWidth = -1;
+    int cachedSrcHeight = -1;
+
     // Model dimensions
+    int inputC = 3;
     int inputH = 640;
     int inputW = 640;
     int numClasses = 80;
     int maxDetections = 8400;
+
+    bool checkCuda(cudaError_t status, const char* msg) {
+        if (status != cudaSuccess) {
+            std::cerr << msg << ": " << cudaGetErrorString(status) << std::endl;
+            return false;
+        }
+        return true;
+    }
+
+    void releaseBuffers() {
+        if (buffers[0]) {
+            cudaFree(buffers[0]);
+            buffers[0] = nullptr;
+        }
+        if (buffers[1]) {
+            cudaFree(buffers[1]);
+            buffers[1] = nullptr;
+        }
+        if (hostInput) {
+            cudaFreeHost(hostInput);
+            hostInput = nullptr;
+        }
+        if (hostOutput) {
+            cudaFreeHost(hostOutput);
+            hostOutput = nullptr;
+        }
+    }
     
 public:
-    TRTEngine() : buffers{nullptr, nullptr} {
-        cudaStreamCreate(&stream);
+    TRTEngine()
+        : buffers{nullptr, nullptr},
+          stream(nullptr),
+          hostInput(nullptr),
+          hostOutput(nullptr),
+          inputIndex(-1),
+          outputIndex(-1),
+          inputSize(0),
+          outputSize(0) {
+        if (cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking) != cudaSuccess) {
+            stream = nullptr;
+            std::cerr << "Failed to create CUDA stream" << std::endl;
+        }
     }
-    
+
     ~TRTEngine() {
-        if (buffers[0]) cudaFree(buffers[0]);
-        if (buffers[1]) cudaFree(buffers[1]);
-        cudaStreamDestroy(stream);
+        releaseBuffers();
+        if (stream) cudaStreamDestroy(stream);
     }
-    
+
     bool loadEngine(const std::string& enginePath) {
         std::ifstream file(enginePath, std::ios::binary);
         if (!file.good()) {
@@ -99,34 +151,98 @@ public:
         // TensorRT 10 API - find tensor indices
         inputIndex = -1;
         outputIndex = -1;
+        inputTensorName.clear();
+        outputTensorName.clear();
         
         for (int i = 0; i < engine->getNbIOTensors(); i++) {
             const char* tensorName = engine->getIOTensorName(i);
-            if (strcmp(tensorName, "images") == 0) {
-                inputIndex = i;
-            } else if (strcmp(tensorName, "output0") == 0) {
-                outputIndex = i;
+            auto mode = engine->getTensorIOMode(tensorName);
+            if (mode == nvinfer1::TensorIOMode::kINPUT) {
+                if (inputIndex == -1 || strcmp(tensorName, "images") == 0) {
+                    inputIndex = i;
+                    inputTensorName = tensorName;
+                }
+            } else if (mode == nvinfer1::TensorIOMode::kOUTPUT) {
+                if (outputIndex == -1 || strcmp(tensorName, "output0") == 0) {
+                    outputIndex = i;
+                    outputTensorName = tensorName;
+                }
             }
         }
-        
+
         if (inputIndex == -1 || outputIndex == -1) {
             std::cerr << "Failed to find input/output tensors" << std::endl;
+            return false;
+        }
+        if (inputTensorName.empty() || outputTensorName.empty()) {
+            std::cerr << "Input or output tensor name not resolved" << std::endl;
             return false;
         }
         
         auto inputDims = engine->getTensorShape(engine->getIOTensorName(inputIndex));
         auto outputDims = engine->getTensorShape(engine->getIOTensorName(outputIndex));
         
-        inputSize = 1 * 3 * inputH * inputW * sizeof(float);
-        outputSize = 1 * (numClasses + 4) * maxDetections * sizeof(float);
-        
-        cudaMalloc(&buffers[0], inputSize);  // Input buffer
-        cudaMalloc(&buffers[1], outputSize); // Output buffer
-        
+        if (inputDims.nbDims >= 4) {
+            inputC = std::max(1, inputDims.d[1]);
+            inputH = std::max(1, inputDims.d[2]);
+            inputW = std::max(1, inputDims.d[3]);
+        }
+
+        if (outputDims.nbDims >= 3) {
+            maxDetections = std::max(1, outputDims.d[1]);
+            numClasses = std::max(0, outputDims.d[2] - 4);
+        }
+
+        inputSize = static_cast<size_t>(inputC) * inputH * inputW * sizeof(float);
+        outputSize = static_cast<size_t>(maxDetections) * (numClasses + 4) * sizeof(float);
+
+        if (!stream) {
+            if (cudaStreamCreateWithFlags(&stream, cudaStreamNonBlocking) != cudaSuccess) {
+                std::cerr << "Failed to create CUDA stream" << std::endl;
+                return false;
+            }
+        }
+
+        cachedSrcWidth = -1;
+        cachedSrcHeight = -1;
+        resizeXIndices.clear();
+        resizeYIndices.clear();
+
+        releaseBuffers();
+
+        if (!checkCuda(cudaMalloc(&buffers[0], inputSize), "Failed to allocate device input buffer")) {
+            releaseBuffers();
+            return false;
+        }
+        if (!checkCuda(cudaMalloc(&buffers[1], outputSize), "Failed to allocate device output buffer")) {
+            releaseBuffers();
+            return false;
+        }
+
+        if (!checkCuda(cudaMallocHost(&hostInput, inputSize), "Failed to allocate host input buffer")) {
+            releaseBuffers();
+            return false;
+        }
+        if (!checkCuda(cudaMallocHost(&hostOutput, outputSize), "Failed to allocate host output buffer")) {
+            releaseBuffers();
+            return false;
+        }
+
+        nvinfer1::Dims inputShape;
+        inputShape.nbDims = 4;
+        inputShape.d[0] = 1;
+        inputShape.d[1] = inputC;
+        inputShape.d[2] = inputH;
+        inputShape.d[3] = inputW;
+        if (!context->setInputShape(inputTensorName.c_str(), inputShape)) {
+            std::cerr << "Failed to set input shape on execution context" << std::endl;
+            return false;
+        }
+
         std::cout << "Engine loaded successfully!" << std::endl;
-        std::cout << "Input shape: " << inputDims.d[0] << "x" << inputDims.d[1] 
+        std::cout << "Input shape: " << inputDims.d[0] << "x" << inputDims.d[1]
                   << "x" << inputDims.d[2] << "x" << inputDims.d[3] << std::endl;
-        std::cout << "Output shape: " << outputDims.d[0] << "x" << outputDims.d[1] 
+        std::cout << "Output shape: " << outputDims.d[0] << "x" << outputDims.d[1]
                   << "x" << outputDims.d[2] << std::endl;
         
         return true;
@@ -134,63 +250,106 @@ public:
     
     std::vector<Detection> infer(unsigned char* imageData, int width, int height, int channels) {
         // Resize and preprocess image
-        std::vector<float> inputData(3 * inputH * inputW);
-        
-        // Simple bilinear resize and normalize
-        float scaleX = (float)width / inputW;
-        float scaleY = (float)height / inputH;
-        
+        if (!context) {
+            std::cerr << "Execution context is not initialized" << std::endl;
+            return {};
+        }
+        if (!stream) {
+            std::cerr << "CUDA stream is not available" << std::endl;
+            return {};
+        }
+        const int planeSize = inputH * inputW;
+        const int copyChannels = std::min(channels, inputC);
+        const float inv255 = 1.0f / 255.0f;
+        if (channels < inputC) {
+            std::fill(hostInput + copyChannels * planeSize, hostInput + inputC * planeSize, 0.0f);
+        }
+
+        if (width != cachedSrcWidth) {
+            resizeXIndices.resize(inputW);
+            float scaleX = static_cast<float>(width) / static_cast<float>(inputW);
+            int maxX = std::max(width - 1, 0);
+            for (int x = 0; x < inputW; ++x) {
+                int srcX = static_cast<int>(x * scaleX);
+                resizeXIndices[x] = std::min(srcX, maxX);
+            }
+            cachedSrcWidth = width;
+        }
+        if (height != cachedSrcHeight) {
+            resizeYIndices.resize(inputH);
+            float scaleY = static_cast<float>(height) / static_cast<float>(inputH);
+            int maxY = std::max(height - 1, 0);
+            for (int y = 0; y < inputH; ++y) {
+                int srcY = static_cast<int>(y * scaleY);
+                resizeYIndices[y] = std::min(srcY, maxY);
+            }
+            cachedSrcHeight = height;
+        }
+
+        if (resizeXIndices.size() != static_cast<size_t>(inputW)) {
+            resizeXIndices.assign(inputW, 0);
+        }
+        if (resizeYIndices.size() != static_cast<size_t>(inputH)) {
+            resizeYIndices.assign(inputH, 0);
+        }
+
         for (int y = 0; y < inputH; y++) {
+            int srcY = resizeYIndices[y];
+            int rowBase = (srcY * width) * channels;
+            int dstRowBase = y * inputW;
             for (int x = 0; x < inputW; x++) {
-                int srcX = (int)(x * scaleX);
-                int srcY = (int)(y * scaleY);
-                srcX = std::min(srcX, width - 1);
-                srcY = std::min(srcY, height - 1);
-                
-                int srcIdx = (srcY * width + srcX) * channels;
-                
-                // Convert to RGB and normalize to [0, 1]
-                for (int c = 0; c < 3; c++) {
-                    int dstIdx = c * inputH * inputW + y * inputW + x;
-                    if (c < channels) {
-                        inputData[dstIdx] = imageData[srcIdx + c] / 255.0f;
-                    } else {
-                        inputData[dstIdx] = 0.0f;
-                    }
+                int srcX = resizeXIndices[x];
+                int srcIdx = rowBase + srcX * channels;
+                int dstIdx = dstRowBase + x;
+
+                for (int c = 0; c < copyChannels; ++c) {
+                    hostInput[c * planeSize + dstIdx] = imageData[srcIdx + c] * inv255;
                 }
             }
         }
-        
+
         // Copy to GPU
-        cudaMemcpyAsync(buffers[0], inputData.data(), inputSize, 
-                       cudaMemcpyHostToDevice, stream);
+        if (!checkCuda(cudaMemcpyAsync(buffers[0], hostInput, inputSize,
+                                       cudaMemcpyHostToDevice, stream),
+                       "Failed to copy input to device")) {
+            return {};
+        }
         
         // Run inference - TensorRT 10 API
-        const char* inputName = engine->getIOTensorName(inputIndex);
-        const char* outputName = engine->getIOTensorName(outputIndex);
-        
-        context->setTensorAddress(inputName, buffers[0]);
-        context->setTensorAddress(outputName, buffers[1]);
+        if (!context->setTensorAddress(inputTensorName.c_str(), buffers[0])) {
+            std::cerr << "Failed to set input tensor address" << std::endl;
+            return {};
+        }
+        if (!context->setTensorAddress(outputTensorName.c_str(), buffers[1])) {
+            std::cerr << "Failed to set output tensor address" << std::endl;
+            return {};
+        }
         
         bool status = context->enqueueV3(stream);
         if (!status) {
             std::cerr << "Failed to run inference" << std::endl;
+            return {};
         }
         
         // Copy output back
-        std::vector<float> outputData(outputSize / sizeof(float));
-        cudaMemcpyAsync(outputData.data(), buffers[1], outputSize, 
-                       cudaMemcpyDeviceToHost, stream);
-        cudaStreamSynchronize(stream);
-        
+        if (!checkCuda(cudaMemcpyAsync(hostOutput, buffers[1], outputSize,
+                                       cudaMemcpyDeviceToHost, stream),
+                       "Failed to copy output to host")) {
+            return {};
+        }
+        if (!checkCuda(cudaStreamSynchronize(stream), "Failed to synchronize CUDA stream")) {
+            return {};
+        }
+
         // Postprocess
-        return postprocess(outputData.data());
+        return postprocess(hostOutput);
     }
-    
+
 private:
     std::vector<Detection> postprocess(float* output, float confThreshold = 0.25f) {
         std::vector<Detection> detections;
-        
+        detections.reserve(maxDetections);
+
         for (int i = 0; i < maxDetections; i++) {
             float* ptr = output + i * (numClasses + 4);
             
@@ -217,20 +376,21 @@ private:
         
         // Simple NMS
         std::vector<Detection> nmsResult;
-        std::vector<bool> suppressed(detections.size(), false);
-        
+        nmsResult.reserve(detections.size());
+        std::vector<uint8_t> suppressed(detections.size(), 0);
+
         for (size_t i = 0; i < detections.size(); i++) {
             if (suppressed[i]) continue;
-            
+
             nmsResult.push_back(detections[i]);
-            
+
             for (size_t j = i + 1; j < detections.size(); j++) {
                 if (suppressed[j]) continue;
                 if (detections[i].classId != detections[j].classId) continue;
-                
+
                 float iou = calculateIoU(detections[i], detections[j]);
                 if (iou > 0.45f) {
-                    suppressed[j] = true;
+                    suppressed[j] = 1;
                 }
             }
         }

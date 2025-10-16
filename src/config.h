@@ -7,11 +7,18 @@
 struct ExportConfig {
     std::string input_onnx_path;
     std::string output_engine_path;
-    int input_resolution = 640;
+    int input_resolution = 320;
     bool enable_fp16 = true;  // 에임봇 최적화: FP16 기본 활성화
-    bool enable_fp8 = false;
+    bool enable_fp8 = true;  // 기본 FP8 ON (지원 GPU에서만 활성)
     bool enable_int8 = false;  // INT8 양자화
-    int workspace_mb = 1024;
+    // INT8 calibration (cache-first; data dir optional)
+    std::string int8_calib_cache;      // e.g., calib.cache
+    std::string int8_calib_data_dir;   // optional; not used unless a data-driven calibrator is implemented
+    int calib_batch_size = 8;
+    int calib_max_batches = 200;
+    bool assume_qat_quantized = false; // set true if ONNX has Q/DQ (no calibrator needed)
+
+    int workspace_mb = 2048;  // 넉넉한 워크스페이스로 더 aggressive한 커널 선택 허용
     bool verbose = false;
     
     // TensorRT optimization settings
@@ -24,7 +31,7 @@ struct ExportConfig {
     bool enable_sparse_weights = true;  // 희소 가중치 최적화
     bool enable_direct_io = true;       // Direct I/O
     bool enable_refit = true;           // Refit 가능 엔진
-    bool disable_timing_cache = true;   // 타이밍 캐시 비활성화
+    bool disable_timing_cache = false;   // 타이밍 캐시 사용 (빌드 느림, 성능↑)
     int optimization_level = 5;         // 최적화 레벨 (1-5)
     
     // Tactic Sources
@@ -34,8 +41,8 @@ struct ExportConfig {
     bool use_edge_mask_conv = true;
     
     // NMS settings
-    bool fix_nms_output = false;
-    int nms_max_detections = 300;
+    bool fix_nms_output = true;
+    int nms_max_detections = 200;
     
     // Plugin settings
     std::unordered_set<std::string> selected_plugins;

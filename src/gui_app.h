@@ -45,21 +45,22 @@ private:
     // GUI state
     char m_inputPath[512] = {};
     char m_outputPath[512] = {};
-    int m_resolution = 640;
+    int m_resolution = 320;
     bool m_enableFp16 = true;
-    bool m_enableFp8 = false;
+    bool m_enableFp8 = true;
     bool m_enableInt8 = false;
-    int m_workspaceMb = 1024;
+    bool m_assumeQat = false; // Assume Q/DQ (QAT) present in ONNX for INT8 without dataset
+    int m_workspaceMb = 2048;
     bool m_verbose = true;
-    bool m_fixNmsOutput = false;
-    int m_nmsMaxDetections = 300;
+    bool m_fixNmsOutput = true;
+    int m_nmsMaxDetections = 200;
     
     // Advanced optimization settings
     bool m_enableTf32 = true;
     bool m_enableSparseWeights = true;
     bool m_enableDirectIO = true;
     bool m_enableRefit = true;
-    bool m_disableTimingCache = true;
+    bool m_disableTimingCache = false;
     int m_optimizationLevel = 5;
     
     // Tactic sources

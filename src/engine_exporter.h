@@ -33,4 +33,6 @@ private:
     std::unique_ptr<nvinfer1::IBuilderConfig> m_builderConfig;
     std::unique_ptr<nvonnxparser::IParser> m_parser;
     std::unique_ptr<nvinfer1::ICudaEngine> m_engine;
+    // Optional calibrator (cache-only) lifetime holder
+    std::unique_ptr<nvinfer1::IInt8Calibrator> m_int8Calibrator;
 };

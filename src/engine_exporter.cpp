@@ -186,10 +186,57 @@ void EngineExporter::setupBuilderConfig() {
     
     // ========== 에임봇 최고 속도 최적화 플래그 ==========
     
-    // INT8 정밀도 (UI에서 설정 가능)
+    // INT8 정밀도 (cache-driven; or QAT if assume_qat_quantized)
     if (m_config.enable_int8 && m_builder->platformHasFastInt8()) {
-        m_builderConfig->setFlag(nvinfer1::BuilderFlag::kINT8);
-        std::cout << "  INT8 precision: Enabled\n";
+        // 1) QAT 경로: ONNX에 Q/DQ가 있다고 가정 → 바로 INT8 활성화
+        if (m_config.assume_qat_quantized) {
+            m_builderConfig->setFlag(nvinfer1::BuilderFlag::kINT8);
+            std::cout << "  INT8 precision: Enabled (assume QAT)\n";
+        }
+        // 2) Calibration cache 경로: 데이터 없이 캐시만 사용
+        else if (!m_config.int8_calib_cache.empty()) {
+            class CacheOnlyCalibrator final : public nvinfer1::IInt8EntropyCalibrator2 {
+            public:
+                explicit CacheOnlyCalibrator(const std::string& cachePath, int batch)
+                    : m_cachePath(cachePath), m_batchSize(batch) {
+                    std::ifstream f(m_cachePath, std::ios::binary);
+                    if (f) {
+                        m_cache.assign(std::istreambuf_iterator<char>(f), {});
+                    }
+                }
+                int getBatchSize() const noexcept override { return m_batchSize; }
+                bool getBatch(void*[], const char*[], int) noexcept override { return false; }
+                const void* readCalibrationCache(size_t& length) noexcept override {
+                    if (m_cache.empty()) { length = 0; return nullptr; }
+                    length = m_cache.size();
+                    return m_cache.data();
+                }
+                void writeCalibrationCache(const void* cache, size_t length) noexcept override {
+                    try {
+                        std::ofstream f(m_cachePath, std::ios::binary);
+                        f.write(reinterpret_cast<const char*>(cache), static_cast<std::streamsize>(length));
+                        f.close();
+                    } catch (...) {}
+                }
+            private:
+                std::string m_cachePath;
+                int m_batchSize;
+                std::vector<char> m_cache;
+            };
+            if (std::filesystem::exists(m_config.int8_calib_cache)) {
+                m_int8Calibrator.reset(new CacheOnlyCalibrator(m_config.int8_calib_cache, m_config.calib_batch_size));
+                m_builderConfig->setFlag(nvinfer1::BuilderFlag::kINT8);
+                m_builderConfig->setInt8Calibrator(m_int8Calibrator.get());
+                std::cout << "  INT8 precision: Enabled (cache)\n";
+            } else {
+                std::cout << "  INT8 requested but no calibration cache found: " << m_config.int8_calib_cache << "\n";
+                std::cout << "  -> Provide a valid cache or enable 'Assume QAT' for Q/DQ models.\n";
+            }
+        }
+        // 3) Neither QAT nor cache → 안내만 출력
+        else {
+            std::cout << "  INT8 requested but neither QAT nor calibration cache provided. Skipping INT8.\n";
+        }
     }
     
     // 1. 기본 최적화 플래그

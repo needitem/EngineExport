@@ -247,6 +247,14 @@ void GuiApp::renderExportOptions() {
     ImGui::SameLine();
     helpMarker("Enable INT8 quantization (fastest but may reduce accuracy)");
 
+    // QAT (Quantization Aware Training) toggle
+    // If ONNX has QuantizeLinear/DequantizeLinear (Q/DQ), you can enable INT8 without calibration data
+    ImGui::Indent();
+    ImGui::Checkbox("Assume QAT (ONNX has Q/DQ)", &m_assumeQat);
+    ImGui::SameLine();
+    helpMarker("If your ONNX contains QuantizeLinear/DequantizeLinear nodes, enable this to build INT8 without a dataset.");
+    ImGui::Unindent();
+
     ImGui::Spacing();
     ImGui::Separator();
     ImGui::Spacing();
@@ -529,6 +537,7 @@ void GuiApp::exportThreadFunc() {
         config.enable_fp16 = m_enableFp16;
         config.enable_fp8 = m_enableFp8;
         config.enable_int8 = m_enableInt8;
+        config.assume_qat_quantized = m_assumeQat;
         config.workspace_mb = m_workspaceMb;
         config.verbose = m_verbose;
         config.fix_nms_output = m_fixNmsOutput;

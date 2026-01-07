@@ -1,4 +1,4 @@
-#include "gui_app.h"
+﻿#include "gui_app.h"
 #include "engine_exporter.h"
 #include "config.h"
 
@@ -209,22 +209,18 @@ void GuiApp::renderExportOptions() {
     ImGui::SameLine();
     helpMarker("The input resolution for the model (e.g., 640 for 640x640)");
     
-    const char* resolution_items[] = { "160", "320", "416", "640", "1280" };
-    int current_resolution_index = 2; // default to 640
-    if (m_resolution == 160) current_resolution_index = 0;
-    else if (m_resolution == 320) current_resolution_index = 1;
-    else if (m_resolution == 416) current_resolution_index = 2;
-    else if (m_resolution == 640) current_resolution_index = 3;
-    else if (m_resolution == 1280) current_resolution_index = 4;
-    
-    if (ImGui::Combo("##Resolution", &current_resolution_index, resolution_items, IM_ARRAYSIZE(resolution_items))) {
-        switch (current_resolution_index) {
-            case 0: m_resolution = 160; break;
-            case 1: m_resolution = 320; break;
-            case 2: m_resolution = 416; break;
-            case 3: m_resolution = 640; break;
-            case 4: m_resolution = 1280; break;
+    const char* resolution_items[] = { "128", "160", "192", "224", "256", "288", "320", "352", "384", "416", "448", "480", "512", "544", "576", "608", "640", "672", "704", "736", "768", "800", "832", "864", "896", "928", "960", "992", "1024", "1280" };
+    const int resolution_values[] = { 128, 160, 192, 224, 256, 288, 320, 352, 384, 416, 448, 480, 512, 544, 576, 608, 640, 672, 704, 736, 768, 800, 832, 864, 896, 928, 960, 992, 1024, 1280 };
+    int current_resolution_index = 16; // default to 640
+    for (int i = 0; i < IM_ARRAYSIZE(resolution_values); i++) {
+        if (m_resolution == resolution_values[i]) {
+            current_resolution_index = i;
+            break;
         }
+    }
+
+    if (ImGui::Combo("##Resolution", &current_resolution_index, resolution_items, IM_ARRAYSIZE(resolution_items))) {
+        m_resolution = resolution_values[current_resolution_index];
         if (strlen(m_inputPath) > 0) {
             std::string outputPath = generateOutputPath();
             strncpy_s(m_outputPath, outputPath.c_str(), sizeof(m_outputPath) - 1);

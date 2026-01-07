@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <string>
 #include <memory>
@@ -59,7 +59,7 @@ private:
     bool m_enableTf32 = true;
     bool m_enableSparseWeights = true;
     bool m_enableDirectIO = true;
-    bool m_enableRefit = true;
+    bool m_enableRefit = false;
     bool m_disableTimingCache = false;
     int m_optimizationLevel = 5;
     
@@ -129,3 +129,4 @@ private:
     void removeCustomPlugin(size_t index);
     bool validatePluginPath(const std::string& path);
 };
+

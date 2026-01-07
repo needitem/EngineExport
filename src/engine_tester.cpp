@@ -1,4 +1,4 @@
-#include <NvInfer.h>
+﻿#include <NvInfer.h>
 #include <cuda_runtime.h>
 #include <fstream>
 #include <iostream>
@@ -183,14 +183,14 @@ public:
         auto outputDims = engine->getTensorShape(engine->getIOTensorName(outputIndex));
         
         if (inputDims.nbDims >= 4) {
-            inputC = std::max(1, inputDims.d[1]);
-            inputH = std::max(1, inputDims.d[2]);
-            inputW = std::max(1, inputDims.d[3]);
+            inputC = std::max(1, static_cast<int>(inputDims.d[1]));
+            inputH = std::max(1, static_cast<int>(inputDims.d[2]));
+            inputW = std::max(1, static_cast<int>(inputDims.d[3]));
         }
 
         if (outputDims.nbDims >= 3) {
-            maxDetections = std::max(1, outputDims.d[1]);
-            numClasses = std::max(0, outputDims.d[2] - 4);
+            maxDetections = std::max(1, static_cast<int>(outputDims.d[1]));
+            numClasses = std::max(0, static_cast<int>(outputDims.d[2]) - 4);
         }
 
         inputSize = static_cast<size_t>(inputC) * inputH * inputW * sizeof(float);

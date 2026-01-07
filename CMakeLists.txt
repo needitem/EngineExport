@@ -1,4 +1,10 @@
-cmake_minimum_required(VERSION 3.18)
+﻿cmake_minimum_required(VERSION 3.18)
+
+# CUDA 13.1 환경변수 설정
+set(ENV{CUDA_PATH} "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.1")
+set(ENV{CUDAToolkit_ROOT} "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.1")
+set(CUDAToolkit_ROOT "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.1")
+set(CMAKE_CUDA_COMPILER "C:/Program Files/NVIDIA GPU Computing Toolkit/CUDA/v13.1/bin/nvcc.exe")
 
 project(EngineExport LANGUAGES CXX CUDA)
 
@@ -133,15 +139,9 @@ set_target_properties(engine_tester PROPERTIES
     RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
 )
 
-# Copy TensorRT DLLs on Windows
+# Copy DLLs on Windows
 if(WIN32)
-    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
-        COMMAND ${CMAKE_COMMAND} -E copy_directory
-            ${TENSORRT_ROOT}/lib
-            $<TARGET_FILE_DIR:${PROJECT_NAME}>
-    )
-    
-    # Copy GLFW DLL if it exists
+    # Copy GLFW DLL
     if(EXISTS ${GLFW_ROOT}/lib-vc2022/glfw3.dll)
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -149,4 +149,24 @@ if(WIN32)
                 $<TARGET_FILE_DIR:${PROJECT_NAME}>
         )
     endif()
+    
+    # Copy TensorRT DLLs from needaimbot project
+    set(NEEDAIMBOT_DLL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../needaimbot/x64/Release")
+    if(EXISTS ${NEEDAIMBOT_DLL_DIR})
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${NEEDAIMBOT_DLL_DIR}/nvinfer_10.dll ${NEEDAIMBOT_DLL_DIR}/nvinfer_builder_resource_10.dll
+                ${NEEDAIMBOT_DLL_DIR}/nvonnxparser_10.dll
+                ${NEEDAIMBOT_DLL_DIR}/cudnn64_9.dll
+                $<TARGET_FILE_DIR:${PROJECT_NAME}>
+        )
+        add_custom_command(TARGET engine_tester POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${NEEDAIMBOT_DLL_DIR}/nvinfer_10.dll ${NEEDAIMBOT_DLL_DIR}/nvinfer_builder_resource_10.dll
+                ${NEEDAIMBOT_DLL_DIR}/nvonnxparser_10.dll
+                ${NEEDAIMBOT_DLL_DIR}/cudnn64_9.dll
+                $<TARGET_FILE_DIR:engine_tester>
+        )
+    endif()
 endif()
+

@@ -149,22 +149,54 @@ if(WIN32)
                 $<TARGET_FILE_DIR:${PROJECT_NAME}>
         )
     endif()
-    
-    # Copy TensorRT DLLs from needaimbot project
-    set(NEEDAIMBOT_DLL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../needaimbot/x64/Release")
-    if(EXISTS ${NEEDAIMBOT_DLL_DIR})
+
+    # Copy TensorRT DLLs from deps folder (TensorRT 10.14.1.48)
+    set(TENSORRT_DLL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/deps/TensorRT/bin")
+    if(EXISTS ${TENSORRT_DLL_DIR})
+        # Main TensorRT DLLs
         add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                ${NEEDAIMBOT_DLL_DIR}/nvinfer_10.dll ${NEEDAIMBOT_DLL_DIR}/nvinfer_builder_resource_10.dll
-                ${NEEDAIMBOT_DLL_DIR}/nvonnxparser_10.dll
-                ${NEEDAIMBOT_DLL_DIR}/cudnn64_9.dll
+                ${TENSORRT_DLL_DIR}/nvinfer_10.dll
+                ${TENSORRT_DLL_DIR}/nvinfer_dispatch_10.dll
+                ${TENSORRT_DLL_DIR}/nvinfer_lean_10.dll
+                ${TENSORRT_DLL_DIR}/nvinfer_plugin_10.dll
+                ${TENSORRT_DLL_DIR}/nvinfer_vc_plugin_10.dll
+                ${TENSORRT_DLL_DIR}/nvonnxparser_10.dll
                 $<TARGET_FILE_DIR:${PROJECT_NAME}>
+        )
+        # Builder resource DLLs for different GPU architectures
+        add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${TENSORRT_DLL_DIR}/nvinfer_builder_resource_ptx_10.dll
+                ${TENSORRT_DLL_DIR}/nvinfer_builder_resource_sm75_10.dll
+                ${TENSORRT_DLL_DIR}/nvinfer_builder_resource_sm80_10.dll
+                ${TENSORRT_DLL_DIR}/nvinfer_builder_resource_sm86_10.dll
+                ${TENSORRT_DLL_DIR}/nvinfer_builder_resource_sm89_10.dll
+                ${TENSORRT_DLL_DIR}/nvinfer_builder_resource_sm90_10.dll
+                ${TENSORRT_DLL_DIR}/nvinfer_builder_resource_sm120_10.dll
+                $<TARGET_FILE_DIR:${PROJECT_NAME}>
+        )
+
+        # Same for engine_tester
+        add_custom_command(TARGET engine_tester POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_if_different
+                ${TENSORRT_DLL_DIR}/nvinfer_10.dll
+                ${TENSORRT_DLL_DIR}/nvinfer_dispatch_10.dll
+                ${TENSORRT_DLL_DIR}/nvinfer_lean_10.dll
+                ${TENSORRT_DLL_DIR}/nvinfer_plugin_10.dll
+                ${TENSORRT_DLL_DIR}/nvinfer_vc_plugin_10.dll
+                ${TENSORRT_DLL_DIR}/nvonnxparser_10.dll
+                $<TARGET_FILE_DIR:engine_tester>
         )
         add_custom_command(TARGET engine_tester POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
-                ${NEEDAIMBOT_DLL_DIR}/nvinfer_10.dll ${NEEDAIMBOT_DLL_DIR}/nvinfer_builder_resource_10.dll
-                ${NEEDAIMBOT_DLL_DIR}/nvonnxparser_10.dll
-                ${NEEDAIMBOT_DLL_DIR}/cudnn64_9.dll
+                ${TENSORRT_DLL_DIR}/nvinfer_builder_resource_ptx_10.dll
+                ${TENSORRT_DLL_DIR}/nvinfer_builder_resource_sm75_10.dll
+                ${TENSORRT_DLL_DIR}/nvinfer_builder_resource_sm80_10.dll
+                ${TENSORRT_DLL_DIR}/nvinfer_builder_resource_sm86_10.dll
+                ${TENSORRT_DLL_DIR}/nvinfer_builder_resource_sm89_10.dll
+                ${TENSORRT_DLL_DIR}/nvinfer_builder_resource_sm90_10.dll
+                ${TENSORRT_DLL_DIR}/nvinfer_builder_resource_sm120_10.dll
                 $<TARGET_FILE_DIR:engine_tester>
         )
     endif()

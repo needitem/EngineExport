@@ -6,13 +6,16 @@ if not exist deps mkdir deps
 cd deps
 
 REM Copy TensorRT from needaimbot project
-if exist "..\..\needaimbot\needaimbot\modules\TensorRT-10.8.0.43" (
-    echo Copying TensorRT from needaimbot project...
-    xcopy /E /I /Y "..\..\needaimbot\needaimbot\modules\TensorRT-10.8.0.43" "TensorRT"
+if exist "..\..\needaimbot\inference_pc\needaimbot\modules\TensorRT-10.14.1.48" (
+    echo Copying TensorRT 10.14.1.48 from needaimbot project...
+    xcopy /E /I /Y "..\..\needaimbot\inference_pc\needaimbot\modules\TensorRT-10.14.1.48" "TensorRT"
+) else if exist "D:\my\needaimbot\inference_pc\needaimbot\modules\TensorRT-10.14.1.48" (
+    echo Copying TensorRT 10.14.1.48 from absolute path...
+    xcopy /E /I /Y "D:\my\needaimbot\inference_pc\needaimbot\modules\TensorRT-10.14.1.48" "TensorRT"
 ) else (
     echo TensorRT not found in needaimbot project!
-    echo Please ensure TensorRT is available at:
-    echo   needaimbot\needaimbot\modules\TensorRT-10.8.0.43
+    echo Please ensure TensorRT 10.14.1.48 is available at:
+    echo   needaimbot\inference_pc\needaimbot\modules\TensorRT-10.14.1.48
     echo Or manually copy TensorRT to deps\TensorRT\
 )
 

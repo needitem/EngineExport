@@ -12,6 +12,7 @@ lib/
 
 # Dependencies
 deps/TensorRT/
+deps/glfw/docs/
 
 # Output files
 *.engine
@@ -19,6 +20,9 @@ deps/TensorRT/
 *.ilk
 *.exp
 *.lib
+
+# Exception: Include GLFW libraries
+!deps/glfw/**/*.lib
 
 # Temporary files
 *.tmp
